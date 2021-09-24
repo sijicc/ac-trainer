@@ -1,0 +1,63 @@
+#include <iostream>
+#include <vector>
+#include <Windows.h>
+#include "proc.h"
+
+int main()
+{
+	//Get ProcId of the target process
+	DWORD procId = GetProcId(L"ac_client.exe");
+
+	//GetModuleBaseAddress
+	uintptr_t moduleBase = GetModuleBaseAddress(procId, L"ac_client.exe");
+
+	//Get Handle to Process
+	HANDLE hProcess = 0; //we initialize to 0, because it's good
+	hProcess = OpenProcess(PROCESS_ALL_ACCESS, NULL, procId); //we open a process with all rights
+
+	//Resolve base address of the pointer chain
+	uintptr_t dynamicPtrBaseAddr = moduleBase + 0x10f4f4; //relative offset from cheat engine
+	std::cout << "DynamicPtrBaseAddr = 0x" << std::hex << dynamicPtrBaseAddr << '\n';
+
+	//Resolve our ammo pointer chain
+	std::vector<unsigned int> ammoOffsets = { 0x374, 0x14, 0x0 };	//still from cheat engine, bottom to top
+	std::vector<unsigned int> hpOffsets = { 0xF8 };	 //unsigned int, since we can't have offsets lower than 0
+	std::vector<unsigned int> apOffsets = { 0xFC };
+	std::vector<unsigned int> grenadeOffsets = { 0x158 };
+
+	uintptr_t ammoAddr = FindDMAAddy(hProcess, dynamicPtrBaseAddr, ammoOffsets);
+	uintptr_t hpAddr = FindDMAAddy(hProcess, dynamicPtrBaseAddr, hpOffsets);
+	uintptr_t apAddr = FindDMAAddy(hProcess, dynamicPtrBaseAddr, apOffsets);
+	uintptr_t grenadeAddr = FindDMAAddy(hProcess, dynamicPtrBaseAddr, grenadeOffsets);
+	
+	std::cout << "ammoAddr = 0x" << std::hex << ammoAddr << '\n';
+	std::cout << "grenadeAddr = 0x" << std::hex << grenadeAddr << '\n';
+
+	//Read Ammo Value
+	int ammoValue = 0;
+	int grenadesValue = 0;
+	ReadProcessMemory(hProcess, (BYTE*)ammoAddr, &ammoValue, sizeof(ammoValue), nullptr);
+	ReadProcessMemory(hProcess, (BYTE*)grenadeAddr, &grenadesValue, sizeof(grenadesValue), nullptr);
+	//asides of nullptr you can give null or 0, but you should have your types match eachother
+	//if I understand correctly, technically we could use *ammoValue, but that doesn't guarantee that ammoValue is not null
+	std::cout << "Current ammo = " << std::dec << ammoValue << '\n'; //we redefine to decimals, so it doesn't output hex values
+	std::cout << "Current grenades = " << grenadesValue << '\n';
+
+	//Write to it
+	int newAmmo = 9999;
+	int newHp = 9999;
+	int newAp = 9999;
+	int newGrenade = 9;
+	WriteProcessMemory(hProcess, (BYTE*)ammoAddr, &newAmmo, sizeof(newAmmo), nullptr);
+	WriteProcessMemory(hProcess, (BYTE*)hpAddr, &newHp, sizeof(newHp), nullptr);
+	WriteProcessMemory(hProcess, (BYTE*)apAddr, &newAp, sizeof(newAp), nullptr);
+	WriteProcessMemory(hProcess, (BYTE*)grenadeAddr, &newGrenade, sizeof(newGrenade), nullptr); //write newX to memory at the address of newX with the size of newX
+
+	//Read out again(To confirm that it works)
+	ReadProcessMemory(hProcess, (BYTE*)ammoAddr, &ammoValue, sizeof(ammoValue), nullptr);
+	std::cout << "New ammo = " << std::dec << ammoValue << '\n';
+	ReadProcessMemory(hProcess, (BYTE*)grenadeAddr, &grenadesValue, sizeof(grenadesValue), nullptr);
+	std::cout << "Current grenades = " << grenadesValue << '\n';
+	return 0;
+}
+
